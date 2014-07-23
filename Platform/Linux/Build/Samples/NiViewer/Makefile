@@ -14,7 +14,7 @@ else
 	USED_LIBS += glut GL
 endif
 
-USED_LIBS += OpenNI
+USED_LIBS += OpenNI opencv_core opencv_video opencv_highgui opencv_flann opencv_objdetect opencv_imgproc opencv_calib3d
 
 EXE_NAME = NiViewer
 

@@ -32,7 +32,12 @@ Once running, press 'S' to start recording, and then any other key to stop. You'
 
 * stream.oni (Kinect stream - RGB and depth streams)
 * glasses.out (yaw, pitch and roll data from the glasses)
-* glasses0.avi (video from the left camera of the glasses)
-* glasses1.avi (video from the right camera of the glasses)
+* glasses<n>.avi (video from the nth camera)
 
 Those output files can be used as input files for the [Kinfu](https://github.com/caiosba/MyKinectFusion) project.
+
+TODO
+====
+
+* Make it work with two cameras (right now it gives us "can't allocate memory error"), by changing constant `NUM_CAMS` to two.
+* Adjust FPS of video stream captured from the glasses camera

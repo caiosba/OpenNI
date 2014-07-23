@@ -32,19 +32,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include <string.h>
+#include <string>
 #include <math.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <iostream>
+#include <sstream>
 #include <fstream>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/contrib/contrib.hpp>
 
-// Remember to open the port: sudo iptables -I INPUT -p udp --dport 6002 -j ACCEPT
+// Remember to open the port: sudo iptables -I INPUT -p udp --dport 6001 -j ACCEPT
 #define SERVER_PORT 6001
 int sock;
 std::ofstream output;
+#define NUM_CAMS 1
 
 using namespace xn;
+using namespace cv;
+using namespace std;
 
 #if (XN_PLATFORM == XN_PLATFORM_WIN32)
 #include <Commdlg.h>
@@ -111,12 +120,6 @@ static const XnCodecID CODEC_DONT_CAPTURE = XN_CODEC_ID(0xFF, 0xFF, 0xFF, 0xFF);
 // --------------------------------
 void captureInit()
 {
-  printf("Starting capture...\n");
-	pthread_t threadReadSocket;
-  pthread_create(&threadReadSocket, NULL, readSocket, (void *)&g_Capture);
-	pthread_t threadSaveVideo;
-  pthread_create(&threadSaveVideo, NULL, saveVideo, (void *)&g_Capture);
-  
   // Depth Formats
   int nIndex = 0;
 
@@ -300,6 +303,12 @@ void captureStart(int nDelay)
 
   g_Capture.nStartOn = (XnUInt32)nNow + nDelay;
   g_Capture.State = SHOULD_CAPTURE;
+
+  printf("Starting capture...\n");
+	pthread_t threadReadSocket;
+  pthread_create(&threadReadSocket, NULL, readSocket, (void *)&g_Capture);
+	pthread_t threadSaveVideo;
+  pthread_create(&threadSaveVideo, NULL, saveVideo, (void *)&g_Capture);
 }
 
 void captureCloseWriteDevice()
@@ -656,7 +665,7 @@ void readSocket(void * param)
 
 	output.open("../../../../glasses.out");
 
-  while (1) {
+  while (g_Capture.State == CAPTURING) {
     char code;
     char message[1024];
     long yaw, pitch, roll;
@@ -676,5 +685,50 @@ void readSocket(void * param)
 
 void saveVideo(void * param)
 {
-  printf("Started to capture video\n");
+  VideoCapture* caps[3];
+	VideoWriter* video[3];
+  int codec = CV_FOURCC('M', 'J', 'P', 'G');
+
+  // Values for "i" are the camera IDs
+  for (int i = 1; i <= NUM_CAMS; i++) {
+	  printf("Started to capture video from camera %d\n", i);
+	  caps[i] = new VideoCapture(i);
+
+	  if (!(*caps[i]).isOpened())
+	  {
+	    printf("Could not create capture from camera %d\n", i);
+	    exit(0);
+	  }
+
+	  double width = (*caps[i]).get(CV_CAP_PROP_FRAME_WIDTH);
+	  double height = (*caps[i]).get(CV_CAP_PROP_FRAME_HEIGHT);
+
+	  printf("Camera %d properties:\n", i);
+	  cout << "width = " << width << endl <<"height = "<< height << endl;
+
+		string file = "../../../../glasses1.avi";
+		if (i == 2) file = "../../../../glasses2.avi";
+    video[i] = new VideoWriter(file, codec, 15, cvSize((int)width,(int)height));
+
+	  if (!(*video[i]).isOpened())
+	  {
+	    printf("Could not create video from camera %d\n", i);
+	    exit(0);
+	  }
+	}
+
+  Mat frame;
+	while(g_Capture.State == CAPTURING)
+	{
+    for (int i = 1; i <= NUM_CAMS; i++) {
+		  (*caps[i]) >> frame;
+		  if (!frame.data)
+		  {
+		  	printf("Could not retrieve frame from camera %d\n", i);
+	      exit(0);
+		  }
+		  (*video[i]) << frame;
+		}
+		usleep(100000);
+	}
 }

@@ -68,7 +68,7 @@ ifeq "$(CFG)" "Release"
 	CFLAGS += -O2 -DNDEBUG
 endif
 
-CFLAGS += $(INC_DIRS_OPTION) $(DEFINES_OPTION)
+CFLAGS += $(INC_DIRS_OPTION) $(DEFINES_OPTION) -fpermissive
 LDFLAGS += $(LIB_DIRS_OPTION) $(USED_LIBS_OPTION)
 
 # some lib / exe specifics

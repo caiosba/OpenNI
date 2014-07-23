@@ -4,4 +4,5 @@ Platform/Linux/CreateRedist/Final
 Platform/Linux/CreateRedist/Output
 Platform/Linux/Redist
 Source/DoxyGen/html
-
+Platform/Linux/Bin
+Platform/Linux/Build

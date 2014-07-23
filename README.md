@@ -25,3 +25,5 @@ Hacking OpenNI: Edit files under `Samples/NiViewer`
 Building OpenNI: To build the package manually, you can run `make` in the `Platform/Linux/Build` directory.
 
 Running: Just go to `Platform/Linux/Bin/x86-Release` and run `NiViewer`
+
+You can also execute `./run.sh` to compile and run at once.

@@ -58,5 +58,6 @@ void getCaptureMessage(char* pMessage);
 
 void readSocket(void * param);
 void saveVideo(void * param);
+void saveVideoAndGlasses(void * param);
 
 #endif //__CAPTURE_H__

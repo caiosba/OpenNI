@@ -44,12 +44,15 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/contrib/contrib.hpp>
+#include <ctime>
 
 // Remember to open the port: sudo iptables -I INPUT -p udp --dport 6001 -j ACCEPT
 #define SERVER_PORT 6001
+#define NUM_CAMS 1
 int sock;
 std::ofstream output;
-#define NUM_CAMS 1
+clock_t begin;
+clock_t end;
 
 using namespace xn;
 using namespace cv;
@@ -304,11 +307,14 @@ void captureStart(int nDelay)
   g_Capture.nStartOn = (XnUInt32)nNow + nDelay;
   g_Capture.State = SHOULD_CAPTURE;
 
-  printf("Starting capture...\n");
-	pthread_t threadReadSocket;
-  pthread_create(&threadReadSocket, NULL, readSocket, (void *)&g_Capture);
-	pthread_t threadSaveVideo;
-  pthread_create(&threadSaveVideo, NULL, saveVideo, (void *)&g_Capture);
+  begin = clock();
+
+	// pthread_t threadReadSocket;
+  // pthread_create(&threadReadSocket, NULL, readSocket, (void *)&g_Capture);
+	// pthread_t threadSaveVideo;
+  // pthread_create(&threadSaveVideo, NULL, saveVideo, (void *)&g_Capture);
+	pthread_t threadSave;
+  pthread_create(&threadSave, NULL, saveVideoAndGlasses, (void *)&g_Capture);
 }
 
 void captureCloseWriteDevice()
@@ -334,8 +340,9 @@ void captureStop(int)
   {
   g_Capture.State = NOT_CAPTURING;
   captureCloseWriteDevice();
-	close(sock);
-	output.close();
+	end = clock();
+	double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+	printf("It took %f to run.\n", elapsed_secs);
   }
 }
 
@@ -638,6 +645,12 @@ void error(const char *msg)
 
 void readSocket(void * param)
 {
+
+  while (g_Capture.State != CAPTURING) {
+    printf("Waiting for capture to start before recording glasses...\n");
+		usleep(100000);
+	}
+
   struct sockaddr_in name;
   struct hostent *hp, *gethostbyname();
 
@@ -678,13 +691,20 @@ void readSocket(void * param)
       output << message;
 			printf("Read %s", message);
     }
-
 		usleep(100000);
 	}
+	
+	output.close();
+	close(sock);
 }
 
 void saveVideo(void * param)
 {
+  while (g_Capture.State != CAPTURING) {
+    printf("Waiting for capture to start before recording video...\n");
+		usleep(100000);
+	}
+
   VideoCapture* caps[3];
 	VideoWriter* video[3];
   int codec = CV_FOURCC('M', 'J', 'P', 'G');
@@ -708,7 +728,7 @@ void saveVideo(void * param)
 
 		string file = "../../../../glasses1.avi";
 		if (i == 2) file = "../../../../glasses2.avi";
-    video[i] = new VideoWriter(file, codec, 15, cvSize((int)width,(int)height));
+    video[i] = new VideoWriter(file, codec, 10, cvSize((int)width,(int)height));
 
 	  if (!(*video[i]).isOpened())
 	  {
@@ -730,5 +750,115 @@ void saveVideo(void * param)
 		  (*video[i]) << frame;
 		}
 		usleep(100000);
+	}
+}
+
+void saveVideoAndGlasses(void * param) {
+  while (g_Capture.State != CAPTURING) {
+    printf("Waiting for capture to start before recording video and glasses data...\n");
+		usleep(100000);
+	}
+
+  // Start video
+
+  VideoCapture* caps[3];
+	VideoWriter* video[3];
+  int codec = CV_FOURCC('M', 'J', 'P', 'G');
+
+  // Values for "i" are the camera IDs
+  for (int i = 1; i <= NUM_CAMS; i++) {
+	  printf("Started to capture video from camera %d\n", i);
+	  caps[i] = new VideoCapture(i);
+
+	  if (!(*caps[i]).isOpened())
+	  {
+	    printf("Could not create capture from camera %d\n", i);
+	    exit(0);
+	  }
+
+	  double width = (*caps[i]).get(CV_CAP_PROP_FRAME_WIDTH);
+	  double height = (*caps[i]).get(CV_CAP_PROP_FRAME_HEIGHT);
+
+	  printf("Camera %d properties:\n", i);
+	  cout << "width = " << width << endl <<"height = "<< height << endl;
+
+		string file = "../../../../glasses1.avi";
+		if (i == 2) file = "../../../../glasses2.avi";
+    video[i] = new VideoWriter(file, codec, 10, cvSize((int)width,(int)height));
+
+	  if (!(*video[i]).isOpened())
+	  {
+	    printf("Could not create video from camera %d\n", i);
+	    exit(0);
+	  }
+	}
+
+  Mat frame;
+
+  // Start glasses
+  
+	struct sockaddr_in name;
+  struct hostent *hp, *gethostbyname();
+
+  printf("Listen activating.\n");
+
+  /* Create socket from which to read */
+  sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0)   {
+    perror("Opening datagram socket\n");
+    exit(EXIT_FAILURE);
+  }
+  
+  /* Bind our local address so that the client can send to us */
+  bzero((char *) &name, sizeof(name));
+  name.sin_family = AF_INET;
+  name.sin_addr.s_addr = htonl(INADDR_ANY);
+  name.sin_port = htons(SERVER_PORT);
+  
+  if (bind(sock, (struct sockaddr *) &name, sizeof(name))) {
+    perror("Binding datagram socket\n");
+    exit(EXIT_FAILURE);
+  }
+    
+  printf("Socket has port number #%d\n", ntohs(name.sin_port));
+
+	output.open("../../../../glasses.out");
+
+	while(g_Capture.State == CAPTURING)
+	{
+
+	  // Get frame
+    for (int i = 1; i <= NUM_CAMS; i++) {
+		  (*caps[i]) >> frame;
+		  if (!frame.data)
+		  {
+		  	printf("Could not retrieve frame from camera %d\n", i);
+	      exit(0);
+		  }
+		  (*video[i]) << frame;
+		}
+
+    // Get glasses data
+    char code;
+    char message[1024];
+    long yaw, pitch, roll;
+    int bytes;
+
+    bytes = read(sock, message, 1024);
+
+    if (bytes > 0) {
+      message[bytes] = '\0';
+      output << message;
+			printf("Read %s", message);
+    }
+
+		// Don't maximize CPU
+		usleep(100000);
+	}
+
+	output.close();
+	close(sock);
+  for (int i = 1; i <= NUM_CAMS; i++) {
+	  (*caps[i]).release();
 	}
 }
